@@ -93,6 +93,7 @@ class Question(models.Model):
     )
     # New fields for scoring
     has_scoring = models.BooleanField(default=False)
+    scoring_points = models.FloatField(default=0.0)  # Points for this question
     scoring_guide = models.JSONField(null=True, blank=True)  # Maps answers to scores
     
     class Meta:

@@ -96,7 +96,7 @@ function App() {
             } 
           />
           <Route 
-            path="/hr/surveyresponses" 
+            path="/hr/surveys/responses/:surveyId" 
             element={
               <RequireAuth allowedRoles={['HR']}>
                 <SurveyResponses />

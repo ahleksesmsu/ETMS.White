@@ -46,25 +46,13 @@ const [responses, setResponses] = useState<Record<number, ResponseValue>>({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const fetchSurveyDetails = async () => {
+const fetchSurveyDetails = async () => {
     try {
-      const [assignmentRes, surveyRes] = await Promise.all([
-        api.get(`/surveys/assignments/${id}/`),
-        api.get(`/surveys/forms/${id}/`)
-      ]);
+      const assignmentRes = await api.get(`/api/surveys/assignments/${id}/`);
+      const surveyRes = await api.get(`/api/surveys/forms/${assignmentRes.data.survey.id}/`);
 
       setAssignment(assignmentRes.data);
-      setQuestions(surveyRes.data.questions);
-
-      // Initialize checkbox responses to empty arrays if needed
-     const initialResponses: Record<number, ResponseValue> = {};
-
-      surveyRes.data.questions.forEach((q: Question) => {
-        if (q.type === 'CHECKBOX') {
-          initialResponses[q.id] = [];
-        }
-      });
-      setResponses(initialResponses);
+      setQuestions(surveyRes.data.questions || []);
     } catch (error) {
       console.error('Error fetching survey details:', error);
       toast.error('Failed to load survey');

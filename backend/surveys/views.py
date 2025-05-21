@@ -227,11 +227,13 @@ class SurveyAssignmentViewSet(viewsets.ModelViewSet):
                 # HR can see assignments for employees in their department
                 return SurveyAssignment.objects.filter(
                     employee__user__department=user.department
-                )
-            return SurveyAssignment.objects.all()
+                ).select_related('survey', 'employee__user')
+            return SurveyAssignment.objects.all().select_related('survey', 'employee__user')
         
         # Employees can only see their own assignments
-        return SurveyAssignment.objects.filter(employee__user=user)
+        return SurveyAssignment.objects.filter(
+            employee__user=user
+        ).select_related('survey', 'employee__user')
     
     def get_permissions(self):
         if self.action in ['create', 'update', 'partial_update', 'destroy']:

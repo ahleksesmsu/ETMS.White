@@ -35,7 +35,7 @@ const SurveyList = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
-  
+
   // Assignment modal state
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -43,15 +43,15 @@ const SurveyList = () => {
   const [assignmentDueDate, setAssignmentDueDate] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
-  
+
   // Delete confirmation modal state
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  
+
   // Fetch surveys
   useEffect(() => {
     fetchSurveys();
   }, []);
-  
+
   const fetchSurveys = async () => {
     setIsLoading(true);
     try {
@@ -64,16 +64,16 @@ const SurveyList = () => {
       setIsLoading(false);
     }
   };
-  
+
   // Handle survey deletion
   const handleDeleteClick = (survey: Survey) => {
     setSelectedSurvey(survey);
     setIsDeleteModalOpen(true);
   };
-  
+
   const confirmDelete = async () => {
     if (!selectedSurvey) return;
-    
+
     setIsDeleting(true);
     try {
       await api.delete(`/surveys/forms/${selectedSurvey.id}/`);
@@ -87,12 +87,12 @@ const SurveyList = () => {
       setIsDeleting(false);
     }
   };
-  
+
   // Handle survey assignment
   const handleAssignClick = async (survey: Survey) => {
     setSelectedSurvey(survey);
     setIsAssignModalOpen(true);
-    
+
     // Fetch employees
     try {
       const response = await api.get('/users/employees/');
@@ -102,7 +102,7 @@ const SurveyList = () => {
       toast.error('Failed to load employees');
     }
   };
-  
+
   const toggleEmployeeSelection = (employeeId: number) => {
     if (selectedEmployees.includes(employeeId)) {
       setSelectedEmployees(selectedEmployees.filter(id => id !== employeeId));
@@ -110,18 +110,18 @@ const SurveyList = () => {
       setSelectedEmployees([...selectedEmployees, employeeId]);
     }
   };
-  
+
   const assignSurvey = async () => {
     if (!selectedSurvey || selectedEmployees.length === 0) {
       toast.error('Please select at least one employee');
       return;
     }
-    
+
     if (!assignmentDueDate) {
       toast.error('Please set a due date');
       return;
     }
-    
+
     setIsAssigning(true);
     try {
       // Create assignments for each selected employee
@@ -130,21 +130,21 @@ const SurveyList = () => {
         employee: employeeId,
         due_date: assignmentDueDate
       }));
-      
+
       // Send assignments in batch
       await Promise.all(
         assignments.map(assignment => 
           api.post('/surveys/assignments/', assignment)
         )
       );
-      
+
       toast.success('Survey assigned successfully');
       setIsAssignModalOpen(false);
-      
+
       // Reset state
       setSelectedEmployees([]);
       setAssignmentDueDate('');
-      
+
       // Refresh surveys to update assigned count
       fetchSurveys();
     } catch (error) {
@@ -154,13 +154,13 @@ const SurveyList = () => {
       setIsAssigning(false);
     }
   };
-  
+
   // Filter surveys based on search query
   const filteredSurveys = surveys.filter(survey => 
     survey.title.includes(searchQuery) ||
     survey.description.includes(searchQuery)
   );
-  
+
   // Filter employees based on search query
   const filteredEmployees = employees.filter(employee => 
     employee.name.includes(employeeSearchQuery) ||
@@ -168,7 +168,7 @@ const SurveyList = () => {
     employee.department.includes(employeeSearchQuery) ||
     employee.position.includes(employeeSearchQuery)
   );
-  
+
   // Get category label
   const getCategoryLabel = (category: string) => {
     const categories: {[key: string]: string} = {
@@ -179,7 +179,7 @@ const SurveyList = () => {
     };
     return categories[category] || category;
   };
-  
+
   return (
     <HRLayout title=''>
       <div className="p-6">
@@ -287,6 +287,14 @@ const SurveyList = () => {
                           <Users className="w-5 h-5" />
                         </button>
                         <button 
+                          onClick={() => navigate(`/hr/surveys/responses/${survey.id}`)}
+                          className="p-2 text-emerald-600 hover:text-emerald-800 border border-emerald-200 rounded-md hover:bg-emerald-50 transition-colors"
+                          title="View & Score Responses"
+                        >
+                          <FileText className="w-5 h-5" />
+
+                        </button>
+                        <button 
                           onClick={() => navigate(`/hr/surveys/builder/${survey.id}`)}
                           className="p-2 text-gray-600 hover:text-blue-600 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
                           title="Edit survey"
@@ -353,7 +361,7 @@ const SurveyList = () => {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Due Date
@@ -366,7 +374,7 @@ const SurveyList = () => {
                 min={new Date().toISOString().split('T')[0]}
               />
             </div>
-            
+
             <div className="mb-4">
               <div className="flex justify-between items-center mb-2">
                 <label className="block text-sm font-medium text-gray-700">
@@ -419,7 +427,7 @@ const SurveyList = () => {
                   </ul>
                 )}
               </div>
-              
+
               {selectedEmployees.length > 0 && (
                 <div className="mt-2 flex justify-between items-center">
                   <button
@@ -437,7 +445,7 @@ const SurveyList = () => {
                 </div>
               )}
             </div>
-            
+
             <div className="mt-auto pt-4 border-t border-gray-200 flex justify-end space-x-3">
               <button
                 onClick={() => setIsAssignModalOpen(false)}
