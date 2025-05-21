@@ -66,7 +66,6 @@ class SurveyAssignmentSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     assigned_by_name = serializers.SerializerMethodField()
     total_score = serializers.FloatField(read_only=True)
-
     class Meta:
         model = SurveyAssignment
         fields = ['id', 'survey', 'survey_details', 'employee', 
@@ -93,14 +92,12 @@ class SurveyResponseSerializer(serializers.ModelSerializer):
     question_type = serializers.SerializerMethodField()
     factor = serializers.SerializerMethodField()
     score = serializers.FloatField(read_only=True)
-
     class Meta:
         model = SurveyResponse
         fields = ['id', 'assignment', 'question', 'question_text', 
                  'question_type', 'answer', 'factor', 'submitted_at',
                  'score']
         read_only_fields = ['submitted_at', 'score']
-
     def get_question_text(self, obj):
         return obj.question.text if obj.question else ""
 
