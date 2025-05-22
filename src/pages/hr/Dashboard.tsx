@@ -63,11 +63,9 @@ const HRDashboard: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      // In a real app, you would pass filters as query parameters
       const response = await api.get('/analytics/turnover/');
       setStats(response.data);
       
-      // Extract unique departments
       const uniqueDepartments = [...new Set(response.data.byDepartment.map((d: any) => d.name))];
       setDepartments(uniqueDepartments);
     } catch (error) {
@@ -82,7 +80,6 @@ const HRDashboard: React.FC = () => {
   };
 
   const filterData = (data: any) => {
-    // Apply filters to the data
     let filtered = { ...data };
 
     if (filters.department !== 'all') {
@@ -104,6 +101,40 @@ const HRDashboard: React.FC = () => {
   };
 
   const filteredStats = filterData(stats);
+
+  const CustomizedErrorBar = (props: any) => {
+    const { x, y, width, height, dataKey } = props;
+    const value = Math.abs(height);
+    
+    return (
+      <g>
+        <line
+          x1={x + width / 2}
+          y1={y - value}
+          x2={x + width / 2}
+          y2={y + value}
+          stroke="#666"
+          strokeWidth={2}
+        />
+        <line
+          x1={x + width / 2 - 4}
+          y1={y - value}
+          x2={x + width / 2 + 4}
+          y2={y - value}
+          stroke="#666"
+          strokeWidth={2}
+        />
+        <line
+          x1={x + width / 2 - 4}
+          y1={y + value}
+          x2={x + width / 2 + 4}
+          y2={y + value}
+          stroke="#666"
+          strokeWidth={2}
+        />
+      </g>
+    );
+  };
 
   return (
     <HRLayout title="HR Dashboard">
@@ -250,12 +281,16 @@ const HRDashboard: React.FC = () => {
                   fill="#EF4444"
                   name="Average Risk Score"
                 >
-                  <ErrorBar
-                    dataKey="stdDev"
-                    width={4}
-                    strokeWidth={2}
-                    stroke="#666"
-                  />
+                  {filteredStats.topRiskFactors.map((entry, index) => (
+                    <ErrorBar
+                      key={`error-bar-${index}`}
+                      dataKey="stdDev"
+                      width={4}
+                      strokeWidth={2}
+                      stroke="#666"
+                      direction="y"
+                    />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
