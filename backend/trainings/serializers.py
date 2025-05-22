@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Training, TrainingAssignment
 from departments.serializers import DepartmentSerializer
 from surveys.serializers import FactorSerializer
+from surveys.serializers import FactorSerializer
 
 
 class TrainingSerializer(serializers.ModelSerializer):
