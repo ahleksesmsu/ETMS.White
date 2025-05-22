@@ -2,7 +2,7 @@ import React, { useState, ReactNode } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Users, ClipboardList, LogOut, Menu, X, Home, 
-  ListChecks, UserCog, BookOpen
+  ListChecks, UserMinus, BookOpen
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -107,6 +107,16 @@ const HRLayout: React.FC<HRLayoutProps> = ({ children, title }) => {
           </Link>
         </nav>
 
+          <Link
+            to="/hr/turnover"
+            className={`flex items-center px-6 py-3 mt-1 text-white transition-colors duration-200 ${
+              isActive('/hr/turnover') ? 'bg-teal-700' : 'hover:bg-teal-700'
+            }`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <UserMinus className="w-5 h-5" />
+            <span className="mx-3">Turnover</span>
+          </Link>
         <div className="absolute bottom-0 w-full mb-6">
           <button
             onClick={handleLogout}
