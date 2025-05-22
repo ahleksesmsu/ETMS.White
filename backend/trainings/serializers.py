@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import Training, TrainingAssignment
 from departments.serializers import DepartmentSerializer
+from surveys.serializers import FactorSerializer
 
 
 class TrainingSerializer(serializers.ModelSerializer):
@@ -9,13 +10,14 @@ class TrainingSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     department_details = DepartmentSerializer(source='department', read_only=True)
     participant_count = serializers.SerializerMethodField()
+    factors_details = FactorSerializer(source='factors', many=True, read_only=True)
     
     class Meta:
         model = Training
         fields = ['id', 'title', 'description', 'start_date', 'end_date',
                  'created_by', 'created_by_name', 'department', 'department_details',
-                 'is_active', 'is_mandatory', 'max_participants', 
-                 'participant_count', 'created_at', 'updated_at']
+                 'factors', 'factors_details', 'is_active', 'is_mandatory', 
+                 'max_participants', 'participant_count', 'created_at', 'updated_at']
         read_only_fields = ['created_by', 'created_at', 'updated_at']
     
     def get_created_by_name(self, obj):
@@ -50,3 +52,13 @@ class TrainingAssignmentSerializer(serializers.ModelSerializer):
         if obj.assigned_by:
             return f"{obj.assigned_by.first_name} {obj.assigned_by.last_name}"
         return ""
+
+
+class BulkAssignmentSerializer(serializers.Serializer):
+    """Serializer for bulk training assignments."""
+    
+    employee_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1
+    )
+    notes = serializers.CharField(required=False, allow_blank=True) 
