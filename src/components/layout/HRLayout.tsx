@@ -71,16 +71,7 @@ const HRLayout: React.FC<HRLayoutProps> = ({ children, title }) => {
             <span className="mx-3">Surveys</span>
           </Link>
 
-           <Link
-            to="/hr/surveyresponses"
-            className={`flex items-center px-6 py-3 mt-1 text-white transition-colors duration-200 ${
-              isActive('/hr/surveyresponses') || isActive('/hr/surveys/surveyresponses') ? 'bg-teal-700' : 'hover:bg-teal-700'
-            }`}
-            onClick={() => setSidebarOpen(false)}
-          >
-            <ClipboardList className="w-5 h-5" />
-            <span className="mx-3">Surveys</span>
-          </Link>
+         
 
           <Link
             to="/hr/factors"

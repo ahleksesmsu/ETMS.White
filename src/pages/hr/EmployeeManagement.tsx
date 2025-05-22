@@ -4,6 +4,16 @@ import { Users, UserPlus, Edit2, Trash2 } from 'lucide-react';
 import HRLayout from '../../components/layout/HRLayout';
 import api from '../../services/api';
 
+interface User {
+  id: number;
+  email: string;
+  first_name: string;
+  last_name: string;
+  department_details?: {
+    name: string;
+  };
+}
+
 interface Employee {
   id: number;
   user_details: {
@@ -29,25 +39,22 @@ interface Department {
 const EmployeeManagement: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState({
-    email: '',
-    first_name: '',
-    last_name: '',
-    department: '',
+    user: '',
     position: '',
     hire_date: '',
     is_active: true,
-    turnover_risk: 'LOW',
-    password: '',
-    confirm_password: '',
+    turnover_risk: 'LOW'
   });
 
   useEffect(() => {
     fetchEmployees();
     fetchDepartments();
+    fetchAvailableUsers();
   }, []);
 
   const fetchEmployees = async () => {
@@ -72,14 +79,18 @@ const EmployeeManagement: React.FC = () => {
     }
   };
 
+  const fetchAvailableUsers = async () => {
+    try {
+      const response = await api.get('/users/employees/available_users/');
+      setAvailableUsers(response.data);
+    } catch (error) {
+      console.error('Error fetching available users:', error);
+      toast.error('Failed to load available users');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!selectedEmployee && formData.password !== formData.confirm_password) {
-      toast.error('Passwords do not match');
-      return;
-    }
-
     try {
       if (selectedEmployee) {
         // Update existing employee
@@ -87,31 +98,17 @@ const EmployeeManagement: React.FC = () => {
           position: formData.position,
           hire_date: formData.hire_date,
           is_active: formData.is_active,
-          turnover_risk: formData.turnover_risk,
-          user: {
-            first_name: formData.first_name,
-            last_name: formData.last_name,
-            department: formData.department || null,
-          },
+          turnover_risk: formData.turnover_risk
         });
         toast.success('Employee updated successfully');
       } else {
-        // Create new employee
-        const userResponse = await api.post('/users/accounts/', {
-          email: formData.email,
-          password: formData.password,
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          role: 'EMPLOYEE',
-          department: formData.department || null,
-        });
-
+        // Create new employee profile
         await api.post('/users/employees/', {
-          user: userResponse.data.id,
+          user: formData.user,
           position: formData.position,
           hire_date: formData.hire_date,
           is_active: formData.is_active,
-          turnover_risk: formData.turnover_risk,
+          turnover_risk: formData.turnover_risk
         });
         toast.success('Employee created successfully');
       }
@@ -119,18 +116,14 @@ const EmployeeManagement: React.FC = () => {
       setShowModal(false);
       setSelectedEmployee(null);
       setFormData({
-        email: '',
-        first_name: '',
-        last_name: '',
-        department: '',
+        user: '',
         position: '',
         hire_date: '',
         is_active: true,
-        turnover_risk: 'LOW',
-        password: '',
-        confirm_password: '',
+        turnover_risk: 'LOW'
       });
       fetchEmployees();
+      fetchAvailableUsers();
     } catch (error) {
       console.error('Error saving employee:', error);
       toast.error('Failed to save employee');
@@ -140,16 +133,11 @@ const EmployeeManagement: React.FC = () => {
   const handleEdit = (employee: Employee) => {
     setSelectedEmployee(employee);
     setFormData({
-      email: employee.user_details.email,
-      first_name: employee.user_details.first_name,
-      last_name: employee.user_details.last_name,
-      department: employee.user_details.department_details?.name || '',
+      user: employee.user_details.id.toString(),
       position: employee.position,
       hire_date: employee.hire_date,
       is_active: employee.is_active,
-      turnover_risk: employee.turnover_risk,
-      password: '',
-      confirm_password: '',
+      turnover_risk: employee.turnover_risk
     });
     setShowModal(true);
   };
@@ -161,6 +149,7 @@ const EmployeeManagement: React.FC = () => {
       await api.delete(`/users/employees/${id}/`);
       toast.success('Employee deleted successfully');
       fetchEmployees();
+      fetchAvailableUsers();
     } catch (error) {
       console.error('Error deleting employee:', error);
       toast.error('Failed to delete employee');
@@ -193,16 +182,11 @@ const EmployeeManagement: React.FC = () => {
             onClick={() => {
               setSelectedEmployee(null);
               setFormData({
-                email: '',
-                first_name: '',
-                last_name: '',
-                department: '',
+                user: '',
                 position: '',
                 hire_date: '',
                 is_active: true,
-                turnover_risk: 'LOW',
-                password: '',
-                confirm_password: '',
+                turnover_risk: 'LOW'
               });
               setShowModal(true);
             }}
@@ -318,62 +302,23 @@ const EmployeeManagement: React.FC = () => {
                   {!selectedEmployee && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700">
-                        Email
+                        Select User
                       </label>
-                      <input
-                        type="email"
+                      <select
                         required
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        value={formData.user}
+                        onChange={(e) => setFormData({ ...formData, user: e.target.value })}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                      />
+                      >
+                        <option value="">Select a user</option>
+                        {availableUsers.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.first_name} {user.last_name} ({user.email})
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   )}
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        First Name
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.first_name}
-                        onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.last_name}
-                        onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">
-                      Department
-                    </label>
-                    <select
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                    >
-                      <option value="">Select Department</option>
-                      {departments.map((dept) => (
-                        <option key={dept.id} value={dept.id}>
-                          {dept.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700">
@@ -415,37 +360,6 @@ const EmployeeManagement: React.FC = () => {
                       <option value="HIGH">High Risk</option>
                     </select>
                   </div>
-
-                  {!selectedEmployee && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Password
-                        </label>
-                        <input
-                          type="password"
-                          required
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">
-                          Confirm Password
-                        </label>
-                        <input
-                          type="password"
-                          required
-                          value={formData.confirm_password}
-                          onChange={(e) =>
-                            setFormData({ ...formData, confirm_password: e.target.value })
-                          }
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                        />
-                      </div>
-                    </>
-                  )}
 
                   <div>
                     <label className="flex items-center">

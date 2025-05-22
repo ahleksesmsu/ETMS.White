@@ -41,18 +41,19 @@ class SurveyViewSet(viewsets.ModelViewSet):
     search_fields = ['title', 'description']
     filterset_fields = ['category', 'is_active']
     
+    # surveys/views.py
+
     def get_queryset(self):
         user = self.request.user
-        
+
         if user.role in ['ADMIN', 'HR']:
             return Survey.objects.all()
-        
-        # Employees can only see surveys assigned to them
+
+        # ✅ Allow employee to view both completed and pending surveys
         return Survey.objects.filter(
-            assignments__employee__user=user,
-            assignments__is_completed=False
-        )
-    
+            assignments__employee__user=user
+        ).distinct()
+
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return SurveyWithQuestionsSerializer
@@ -270,7 +271,7 @@ class SurveyResponseViewSet(viewsets.ModelViewSet):
     serializer_class = SurveyResponseSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['assignment', 'question']
+    filterset_fields = ['assignment', 'question', 'assignment__survey']
     
     def get_queryset(self):
         user = self.request.user
@@ -280,33 +281,295 @@ class SurveyResponseViewSet(viewsets.ModelViewSet):
                 # HR can see responses for employees in their department
                 return SurveyResponse.objects.filter(
                     assignment__employee__user__department=user.department
-                )
-            return SurveyResponse.objects.all()
+                ).select_related('assignment', 'question')
+            return SurveyResponse.objects.all().select_related('assignment', 'question')
         
         # Employees can only see their own responses
-        return SurveyResponse.objects.filter(assignment__employee__user=user)
+        return SurveyResponse.objects.filter(
+            assignment__employee__user=user
+        ).select_related('assignment', 'question')
     
-    @action(detail=False, methods=['get'])
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            self.permission_classes = [permissions.IsAuthenticated, IsAdmin | IsHROfficer]
+        return super().get_permissions()
+    
+    @action(detail=False, methods=['get'], url_path='by_survey')
     def by_survey(self, request):
-        """Get responses filtered by survey."""
+        """Get responses grouped by survey assignment."""
         survey_id = request.query_params.get('survey_id')
+        
         if not survey_id:
             return Response(
-                {'detail': 'Survey ID is required'}, 
+                {'detail': 'survey_id parameter is required'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Filter assignments by survey and only include completed ones
-        assignments = SurveyAssignment.objects.filter(
-            survey_id=survey_id,
-            is_completed=True
-        )
-        
-        if request.user.role == 'HR':
-            # HR can see only their department
-            assignments = assignments.filter(
-                employee__user__department=request.user.department
+        try:
+            survey = Survey.objects.get(id=survey_id)
+        except Survey.DoesNotExist:
+            return Response(
+                {'detail': 'Survey not found'}, 
+                status=status.HTTP_404_NOT_FOUND
             )
         
-        serializer = SurveyResponseSummarySerializer(assignments, many=True)
-        return Response(serializer.data)
+        # Get completed assignments for this survey
+        assignments = SurveyAssignment.objects.filter(
+            survey=survey,
+            is_completed=True
+        ).select_related('employee__user').prefetch_related('responses__question')
+        
+        # Check permissions
+        user = request.user
+        if user.role == 'HR':
+            # HR can only see assignments for employees in their department
+            assignments = assignments.filter(
+                employee__user__department=user.department
+            )
+        elif user.role not in ['ADMIN', 'HR']:
+            # Employees can only see their own assignments
+            assignments = assignments.filter(employee__user=user)
+        
+        response_data = []
+        
+        for assignment in assignments:
+            # Get all responses for this assignment
+            responses = assignment.responses.all().select_related('question')
+            
+            response_items = []
+            for response in responses:
+                response_items.append({
+                    'id': response.id,
+                    'question_text': response.question.text,
+                    'question_id': response.question.id,
+                    'answer': response.answer,
+                    'score': response.score,
+                    'max_points': response.question.scoring_points,
+                    'has_scoring': response.question.has_scoring
+                })
+            
+            response_data.append({
+                'id': assignment.id,
+                'employee_details': {
+                    'name': f"{assignment.employee.user.first_name} {assignment.employee.user.last_name}".strip() or assignment.employee.user.username,
+                    'email': assignment.employee.user.email,
+                    'department': getattr(assignment.employee.user, 'department', 'N/A'),
+                    'position': getattr(assignment.employee, 'position', 'N/A')
+                },
+                'completed_at': assignment.completed_at,
+                'total_score': assignment.total_score,
+                'responses': response_items
+            })
+        
+        return Response(response_data)
+
+    @action(detail=True, methods=['patch'])
+    def score(self, request, pk=None):
+        """Update score for a response."""
+        response = self.get_object()
+        score = request.data.get('score')
+        
+        if score is None:
+            return Response(
+                {'detail': 'Score is required'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            score = float(score)
+            
+            # Validate score against max points
+            if response.question.has_scoring:
+                max_points = response.question.scoring_points
+                if score < 0 or score > max_points:
+                    return Response(
+                        {'detail': f'Score must be between 0 and {max_points}'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
+            response.score = score
+            response.save()
+            
+            # Recalculate total score for the assignment
+            assignment = response.assignment
+            
+            # Get all responses for this assignment that have scoring enabled
+            scored_responses = assignment.responses.filter(
+                question__has_scoring=True,
+                score__isnull=False
+            )
+            
+            # Calculate total with factor weights
+            total_score = 0
+            for resp in scored_responses:
+                if resp.question.factor:
+                    # Apply factor weight to the score
+                    weighted_score = resp.score * resp.question.factor.weight
+                    total_score += weighted_score
+                else:
+                    # If no factor, just add the raw score
+                    total_score += resp.score
+            
+            assignment.total_score = total_score
+            assignment.save()
+            
+            return Response({
+                'status': 'score updated',
+                'score': score,
+                'total_score': total_score
+            })
+            
+        except ValueError:
+            return Response(
+                {'detail': 'Invalid score value'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+# views.py (add at the bottom or create analytics/views.py)
+from django.db.models import Count, Avg, Q
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from users.models import Employee
+from surveys.models import SurveyAssignment, SurveyResponse, Factor
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def turnover_analytics(request):
+    user = request.user
+    is_hr = user.role == 'HR'
+    
+    # Scope employees
+    employees = Employee.objects.select_related('user')
+    if is_hr:
+        employees = employees.filter(user__department=user.department)
+
+    # Risk counts
+    risk_levels = {'LOW': 0, 'MEDIUM': 0, 'HIGH': 0}
+    high_risk_employees = []
+    for emp in employees:
+        risk = getattr(emp, 'turnover_risk', None)
+        if risk:
+            risk_levels[risk] += 1
+            if risk == 'HIGH':
+                high_risk_employees.append({
+                    'name': f"{emp.user.first_name} {emp.user.last_name}".strip() or emp.user.username,
+                    'department': getattr(emp.user.department, 'name', 'N/A')
+                })
+
+    # Department counts
+    dept_counts = employees.values('user__department__name').annotate(count=Count('id'))
+    by_department = [{'name': d['user__department__name'] or 'N/A', 'count': d['count']} for d in dept_counts]
+
+    # Risk by department
+    dept_risk = employees.values('user__department__name', 'turnover_risk').annotate(count=Count('id'))
+    risk_by_department = {}
+    for row in dept_risk:
+        dept = row['user__department__name'] or 'N/A'
+        risk = row['turnover_risk']
+        if dept not in risk_by_department:
+            risk_by_department[dept] = {'department': dept, 'lowRiskCount': 0, 'mediumRiskCount': 0, 'highRiskCount': 0}
+        if risk == 'LOW':
+            risk_by_department[dept]['lowRiskCount'] += row['count']
+        elif risk == 'MEDIUM':
+            risk_by_department[dept]['mediumRiskCount'] += row['count']
+        elif risk == 'HIGH':
+            risk_by_department[dept]['highRiskCount'] += row['count']
+
+    # Pending and completed surveys
+    assignments = SurveyAssignment.objects.all()
+    if is_hr:
+        assignments = assignments.filter(employee__user__department=user.department)
+    pending = assignments.filter(is_completed=False).count()
+    completed = assignments.filter(is_completed=True).count()
+
+    # Top risk factors by avg score
+    top_factors_qs = SurveyResponse.objects.filter(
+        score__isnull=False,
+        question__factor__type='TURNOVER'
+    ).values('question__factor__name').annotate(avg=Avg('score')).order_by('-avg')[:5]
+    top_factors = [{'factor': f['question__factor__name'], 'avgScore': round(f['avg'], 2)} for f in top_factors_qs]
+
+    return Response({
+        'total': employees.count(),
+        'byRisk': [
+            {'name': 'Low Risk', 'value': risk_levels['LOW'], 'color': '#16A34A'},
+            {'name': 'Medium Risk', 'value': risk_levels['MEDIUM'], 'color': '#EAB308'},
+            {'name': 'High Risk', 'value': risk_levels['HIGH'], 'color': '#DC2626'},
+        ],
+        'byDepartment': by_department,
+        'pendingSurveys': pending,
+        'completedSurveys': completed,
+        'highRiskEmployees': high_risk_employees,
+        'topRiskFactors': top_factors,
+        'riskByDepartment': list(risk_by_department.values()),
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def turnover_analytics(request):
+    user = request.user
+    is_hr = user.role == 'HR'
+
+    employees = Employee.objects.select_related('user')
+    if is_hr:
+        employees = employees.filter(user__department=user.department)
+
+    risk_levels = {'LOW': 0, 'MEDIUM': 0, 'HIGH': 0}
+    high_risk_employees = []
+
+    for emp in employees:
+        risk = getattr(emp, 'turnover_risk', None)
+        if risk:
+            risk_levels[risk] += 1
+            if risk == 'HIGH':
+                high_risk_employees.append({
+                    'name': f"{emp.user.first_name} {emp.user.last_name}".strip() or emp.user.username,
+                    'department': getattr(emp.user.department, 'name', 'N/A')
+                })
+
+    dept_counts = employees.values('user__department__name').annotate(count=Count('id'))
+    by_department = [{'name': d['user__department__name'] or 'N/A', 'count': d['count']} for d in dept_counts]
+
+    dept_risk = employees.values('user__department__name', 'turnover_risk').annotate(count=Count('id'))
+    risk_by_department = {}
+    for row in dept_risk:
+        dept = row['user__department__name'] or 'N/A'
+        risk = row['turnover_risk']
+        if dept not in risk_by_department:
+            risk_by_department[dept] = {'department': dept, 'lowRiskCount': 0, 'mediumRiskCount': 0, 'highRiskCount': 0}
+        if risk == 'LOW':
+            risk_by_department[dept]['lowRiskCount'] += row['count']
+        elif risk == 'MEDIUM':
+            risk_by_department[dept]['mediumRiskCount'] += row['count']
+        elif risk == 'HIGH':
+            risk_by_department[dept]['highRiskCount'] += row['count']
+
+    assignments = SurveyAssignment.objects.all()
+    if is_hr:
+        assignments = assignments.filter(employee__user__department=user.department)
+
+    pending = assignments.filter(is_completed=False).count()
+    completed = assignments.filter(is_completed=True).count()
+
+    top_factors_qs = SurveyResponse.objects.filter(
+        score__isnull=False,
+        question__factor__type='TURNOVER'
+    ).values('question__factor__name').annotate(avg=Avg('score')).order_by('-avg')[:5]
+
+    top_factors = [{'factor': f['question__factor__name'], 'avgScore': round(f['avg'], 2)} for f in top_factors_qs]
+
+    return Response({
+        'total': employees.count(),
+        'byRisk': [
+            {'name': 'Low Risk', 'value': risk_levels['LOW'], 'color': '#16A34A'},
+            {'name': 'Medium Risk', 'value': risk_levels['MEDIUM'], 'color': '#EAB308'},
+            {'name': 'High Risk', 'value': risk_levels['HIGH'], 'color': '#DC2626'},
+        ],
+        'byDepartment': by_department,
+        'pendingSurveys': pending,
+        'completedSurveys': completed,
+        'highRiskEmployees': high_risk_employees,
+        'topRiskFactors': top_factors,
+        'riskByDepartment': list(risk_by_department.values()),
+    })

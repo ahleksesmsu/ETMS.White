@@ -31,12 +31,12 @@ class UserViewSet(viewsets.ModelViewSet):
         """Reset user password (admin only)."""
         user = self.get_object()
         serializer = PasswordResetSerializer(data=request.data)
-        
+
         if serializer.is_valid():
             user.set_password(serializer.validated_data['password'])
             user.save()
             return Response({'status': 'password reset'}, status=status.HTTP_200_OK)
-        
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -51,16 +51,16 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter employees by department for HR Officers."""
         user = self.request.user
-        
+
         if user.role == 'ADMIN':
             return Employee.objects.all()
         elif user.role == 'HR':
             # HR can see employees in their department
             return Employee.objects.filter(user__department=user.department)
-        
+
         # Employees can only see themselves
         return Employee.objects.filter(user=user)
-        
+
     @action(detail=False, methods=['get'])
     def me(self, request):
         """Get current employee profile."""
@@ -73,3 +73,13 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 {'detail': 'Employee profile not found'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
+
+    @action(detail=False, methods=['get'])
+    def available_users(self, request):
+        """Get users without employee profiles."""
+        users = User.objects.filter(
+            employee_profile__isnull=True,
+            role='EMPLOYEE'  # Only show users with EMPLOYEE role
+        ).exclude(is_superuser=True)  # Exclude superusers
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)

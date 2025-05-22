@@ -149,3 +149,41 @@ class SurveyResponseSummarySerializer(serializers.ModelSerializer):
                 'position': obj.employee.position
             }
         return None
+
+class SurveyResponseDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for individual survey responses."""
+    question_text = serializers.CharField(source='question.text', read_only=True)
+    question_id = serializers.IntegerField(source='question.id', read_only=True)
+    max_points = serializers.FloatField(source='question.scoring_points', read_only=True)
+    has_scoring = serializers.BooleanField(source='question.has_scoring', read_only=True)
+    
+    class Meta:
+        model = SurveyResponse
+        fields = [
+            'id', 'question_id', 'question_text', 'answer', 
+            'score', 'max_points', 'has_scoring', 'submitted_at'
+        ]
+
+class SurveyResponseSummarySerializer(serializers.ModelSerializer):
+    """Serializer for survey assignment responses summary."""
+    employee_details = serializers.SerializerMethodField()
+    responses = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SurveyAssignment
+        fields = [
+            'id', 'employee_details', 'completed_at', 
+            'total_score', 'responses'
+        ]
+    
+    def get_employee_details(self, obj):
+        return {
+            'name': obj.employee.user.get_full_name() or obj.employee.user.email,
+            'email': obj.employee.user.email,
+            'department': obj.employee.user.department,
+            'position': obj.employee.position or 'N/A'
+        }
+    
+    def get_responses(self, obj):
+        responses = obj.responses.all().select_related('question')
+        return SurveyResponseDetailSerializer(responses, many=True).data

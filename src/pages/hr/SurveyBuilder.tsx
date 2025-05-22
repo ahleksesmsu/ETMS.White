@@ -145,6 +145,7 @@ const SurveyBuilder: React.FC = () => {
       temp_id: Date.now().toString(), // Temporary ID for new questions
       has_scoring: false,
       scoring_points: 0,
+      scoring_guide: null,
     };
     setQuestions([...questions, newQuestion]);
   };

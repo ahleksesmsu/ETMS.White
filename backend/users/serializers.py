@@ -76,9 +76,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     
     user_details = UserSerializer(source='user', read_only=True)
     user = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(), 
-        write_only=True
+        queryset=User.objects.all(),
+        write_only=True,
+        required=False  # <-- Add this
     )
+
     
     class Meta:
         model = Employee

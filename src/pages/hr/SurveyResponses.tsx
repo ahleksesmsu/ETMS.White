@@ -39,7 +39,7 @@ interface Response {
   }[];
 }
 
-const SurveyResponses = () => {
+const SurveyResponses: React.FC = () => {
   const { surveyId } = useParams();
   const navigate = useNavigate();
   const [responses, setResponses] = useState<Response[]>([]);

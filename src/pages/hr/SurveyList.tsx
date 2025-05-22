@@ -22,11 +22,29 @@ interface Survey {
 
 interface Employee {
   id: number;
-  name: string;
-  email: string;
-  department: string;
+  user_details: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+    department_details?: {
+      name: string;
+    };
+  };
   position: string;
 }
+
+// Helper function to get employee display data
+const getEmployeeDisplayData = (employee: Employee) => {
+  const { user_details, position } = employee;
+  return {
+    id: employee.id,
+    name: `${user_details.first_name} ${user_details.last_name}`,
+    email: user_details.email,
+    department: user_details.department_details?.name || 'No Department',
+    position: position
+  };
+};
 
 const SurveyList = () => {
   const navigate = useNavigate();
@@ -43,6 +61,7 @@ const SurveyList = () => {
   const [assignmentDueDate, setAssignmentDueDate] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
 
   // Delete confirmation modal state
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -92,14 +111,32 @@ const SurveyList = () => {
   const handleAssignClick = async (survey: Survey) => {
     setSelectedSurvey(survey);
     setIsAssignModalOpen(true);
+    setIsLoadingEmployees(true);
 
-    // Fetch employees
+    // Fetch employees - using the correct endpoint from your Django views
     try {
       const response = await api.get('/users/employees/');
+      console.log('Employee API response:', response.data); // Debug log
       setEmployees(response.data);
     } catch (error) {
       console.error('Error fetching employees:', error);
-      toast.error('Failed to load employees');
+      // Try alternative endpoint if the first one fails
+      try {
+        const alternativeResponse = await api.get('/users/employees/available_users/');
+        console.log('Alternative employee API response:', alternativeResponse.data); // Debug log
+        // Transform user data to employee format if needed
+        const transformedEmployees = alternativeResponse.data.map((user: any) => ({
+          id: user.id,
+          user_details: user,
+          position: 'Employee' // Default position
+        }));
+        setEmployees(transformedEmployees);
+      } catch (altError) {
+        console.error('Error fetching employees from alternative endpoint:', altError);
+        toast.error('Failed to load employees');
+      }
+    } finally {
+      setIsLoadingEmployees(false);
     }
   };
 
@@ -131,42 +168,54 @@ const SurveyList = () => {
         due_date: assignmentDueDate
       }));
 
+      console.log('Sending assignments:', assignments); // Debug log
+
       // Send assignments in batch
-      await Promise.all(
-        assignments.map(assignment => 
-          api.post('/surveys/assignments/', assignment)
-        )
+      const assignmentPromises = assignments.map(assignment => 
+        api.post('/surveys/assignments/', assignment)
       );
 
-      toast.success('Survey assigned successfully');
+      await Promise.all(assignmentPromises);
+
+      toast.success(`Survey assigned to ${selectedEmployees.length} employee(s) successfully`);
       setIsAssignModalOpen(false);
 
       // Reset state
       setSelectedEmployees([]);
       setAssignmentDueDate('');
+      setEmployeeSearchQuery('');
 
       // Refresh surveys to update assigned count
       fetchSurveys();
     } catch (error) {
       console.error('Error assigning survey:', error);
-      toast.error('Failed to assign survey');
+      toast.error('Failed to assign survey. Please check the console for details.');
     } finally {
       setIsAssigning(false);
     }
   };
 
+  // Close modals and reset state
+  const closeAssignModal = () => {
+    setIsAssignModalOpen(false);
+    setSelectedEmployees([]);
+    setAssignmentDueDate('');
+    setEmployeeSearchQuery('');
+    setEmployees([]);
+  };
+
   // Filter surveys based on search query
   const filteredSurveys = surveys.filter(survey => 
-    survey.title.includes(searchQuery) ||
-    survey.description.includes(searchQuery)
+    survey.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    survey.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Filter employees based on search query
-  const filteredEmployees = employees.filter(employee => 
-    employee.name.includes(employeeSearchQuery) ||
-    employee.email.includes(employeeSearchQuery) ||
-    employee.department.includes(employeeSearchQuery) ||
-    employee.position.includes(employeeSearchQuery)
+  const filteredEmployees = employees.map(getEmployeeDisplayData).filter(employee => 
+    employee.name.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+    employee.email.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+    employee.department.toLowerCase().includes(employeeSearchQuery.toLowerCase()) ||
+    employee.position.toLowerCase().includes(employeeSearchQuery.toLowerCase())
   );
 
   // Get category label
@@ -292,7 +341,6 @@ const SurveyList = () => {
                           title="View & Score Responses"
                         >
                           <FileText className="w-5 h-5" />
-
                         </button>
                         <button 
                           onClick={() => navigate(`/hr/surveys/builder/${survey.id}`)}
@@ -355,7 +403,7 @@ const SurveyList = () => {
                 Assign Survey: {selectedSurvey?.title}
               </h3>
               <button 
-                onClick={() => setIsAssignModalOpen(false)}
+                onClick={closeAssignModal}
                 className="text-gray-500 hover:text-gray-700"
               >
                 <X className="w-5 h-5" />
@@ -395,9 +443,14 @@ const SurveyList = () => {
                 />
               </div>
               <div className="border border-gray-200 rounded-md overflow-y-auto max-h-64">
-                {filteredEmployees.length === 0 ? (
+                {isLoadingEmployees ? (
+                  <div className="p-4 text-center">
+                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                    <span className="text-gray-500">Loading employees...</span>
+                  </div>
+                ) : filteredEmployees.length === 0 ? (
                   <div className="p-4 text-center text-gray-500">
-                    No employees match your search
+                    {employees.length === 0 ? 'No employees available' : 'No employees match your search'}
                   </div>
                 ) : (
                   <ul className="divide-y divide-gray-200">
@@ -428,7 +481,7 @@ const SurveyList = () => {
                 )}
               </div>
 
-              {selectedEmployees.length > 0 && (
+              {selectedEmployees.length > 0 && filteredEmployees.length > 0 && (
                 <div className="mt-2 flex justify-between items-center">
                   <button
                     onClick={() => setSelectedEmployees([])}
@@ -437,10 +490,10 @@ const SurveyList = () => {
                     Clear selection
                   </button>
                   <button
-                    onClick={() => setSelectedEmployees(employees.map(e => e.id))}
+                    onClick={() => setSelectedEmployees(filteredEmployees.map(e => e.id))}
                     className="text-sm text-blue-600 hover:text-blue-800"
                   >
-                    Select all
+                    Select all visible
                   </button>
                 </div>
               )}
@@ -448,7 +501,7 @@ const SurveyList = () => {
 
             <div className="mt-auto pt-4 border-t border-gray-200 flex justify-end space-x-3">
               <button
-                onClick={() => setIsAssignModalOpen(false)}
+                onClick={closeAssignModal}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
                 disabled={isAssigning}
               >
@@ -467,7 +520,7 @@ const SurveyList = () => {
                 ) : (
                   <>
                     <Users className="w-4 h-4 mr-2" />
-                    Assign Survey
+                    Assign Survey ({selectedEmployees.length})
                   </>
                 )}
               </button>

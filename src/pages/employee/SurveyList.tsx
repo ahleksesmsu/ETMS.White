@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import EmployeeLayout from '../../components/layout/EmployeeLayout';
@@ -62,8 +62,8 @@ const SurveysList: React.FC = () => {
                 </p>
                 <div className="mt-4">
                   <Link
-                    to={`/employee/surveys/${assignment.survey_details.id}`}
-                    className="inline-block bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium px-4 py-2 rounded"
+                    to={`/employee/surveys/${assignment.id}?readonly=${assignment.is_completed}`}
+                    className={`inline-block text-sm font-medium px-4 py-2 rounded text-white ${assignment.is_completed ? 'bg-gray-500 hover:bg-gray-600' : 'bg-amber-600 hover:bg-amber-700'}`}
                   >
                     {assignment.is_completed ? 'View Response' : 'Start Survey'}
                   </Link>
