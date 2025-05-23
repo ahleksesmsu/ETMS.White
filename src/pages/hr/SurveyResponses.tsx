@@ -1,215 +1,239 @@
-
+// SurveyResponse.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BarChart } from 'lucide-react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import HRLayout from '../../components/layout/HRLayout';
+import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import EmployeeLayout from '../../components/layout/EmployeeLayout';
 import api from '../../services/api';
 
-interface ResponseStats {
-  survey_id: number;
-  title: string;
-  total_assignments: number;
-  completed_assignments: number;
-  completion_rate: number;
-  avg_score: number;
-  factor_analysis: {
-    id: number;
-    name: string;
-    type: string;
-    avg_score: number;
-    response_count: number;
-  }[];
-}
-
-interface Response {
+interface Question {
   id: number;
-  employee_details: {
-    name: string;
-    email: string;
-    department: string;
-    position: string;
-  };
-  completed_at: string;
-  total_score: number;
-  responses: {
-    question_text: string;
-    answer: any;
-    score: number | null;
-  }[];
+  text: string;
+  type: string;
+  options: string[] | null;
+  is_required: boolean;
+  order: number;
 }
 
-const SurveyResponses: React.FC = () => {
-  const { surveyId } = useParams();
+interface SurveyAssignment {
+  id: number;
+  survey_details: {
+    id: number;
+    title: string;
+    description: string;
+    category: string;
+  };
+  due_date: string | null;
+  is_completed: boolean;
+}
+
+type ResponseValue = string | number | string[];
+
+const SurveyResponse: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const readonly = searchParams.get('readonly') === 'true';
+
   const navigate = useNavigate();
-  const [responses, setResponses] = useState<Response[]>([]);
-  const [stats, setStats] = useState<ResponseStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [assignment, setAssignment] = useState<SurveyAssignment | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [responses, setResponses] = useState<Record<number, ResponseValue>>({});
 
   useEffect(() => {
-    fetchResponses();
-    fetchStats();
-  }, [surveyId]);
-
-  const fetchResponses = async () => {
-    try {
-      const response = await api.get(`/surveys/responses/by_survey/?survey_id=${surveyId}`);
-      setResponses(response.data);
-    } catch (error) {
-      console.error('Error fetching responses:', error);
-      toast.error('Failed to load responses');
+    if (!id) {
+      toast.error('Invalid survey ID');
+      setIsLoading(false);
+      return;
     }
-  };
+    fetchSurveyDetails();
+  }, [id]);
 
-  const fetchStats = async () => {
+  const fetchSurveyDetails = async () => {
     try {
-      const response = await api.get(`/surveys/forms/${surveyId}/statistics/`);
-      setStats(response.data);
+      const assignmentRes = await api.get(`/surveys/assignments/${id}/`);
+      const surveyRes = await api.get(`/surveys/forms/${assignmentRes.data.survey_details.id}/`);
+      setAssignment(assignmentRes.data);
+      setQuestions(surveyRes.data.questions || []);
+
+      const responseRes = await api.get(`/surveys/responses/by_survey/?survey_id=${assignmentRes.data.survey_details.id}`);
+      const existing = responseRes.data;
+      const responseMap: Record<number, ResponseValue> = {};
+      existing.forEach((item: any) => {
+        responseMap[item.question.id] = item.answer?.value ?? item.answer?.values ?? '';
+      });
+      setResponses(responseMap);
     } catch (error) {
-      console.error('Error fetching statistics:', error);
-      toast.error('Failed to load statistics');
+      console.error('Error fetching survey details:', error);
+      toast.error('Failed to load survey');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleResponseChange = (questionId: number, value: ResponseValue) => {
+    if (readonly) return;
+    setResponses(prev => ({ ...prev, [questionId]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (readonly || !assignment) return;
+
+    const unansweredRequired = questions.filter(q => {
+      const resp = responses[q.id];
+      if (q.is_required) {
+        if (q.type === 'CHECKBOX') return !(Array.isArray(resp) && resp.length > 0);
+        return resp === undefined || resp === null || resp === '';
+      }
+      return false;
+    });
+
+    if (unansweredRequired.length > 0) {
+      toast.error('Please answer all required questions');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const formattedResponses = Object.entries(responses).map(([questionId, answer]) => ({
+        question_id: parseInt(questionId),
+        answer
+      }));
+
+      await api.post(`/surveys/forms/${assignment.survey_details.id}/submit/`, {
+        assignment_id: assignment.id,
+        responses: formattedResponses
+      });
+
+      toast.success('Survey submitted successfully');
+      navigate('/employee');
+    } catch (error) {
+      console.error('Error submitting survey:', error);
+      toast.error('Failed to submit survey');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const renderQuestion = (question: Question) => {
+    const disabled = readonly;
+    const value = responses[question.id] || '';
+
+    switch (question.type) {
+      case 'TEXT':
+        return <input type="text" value={value} disabled={disabled} onChange={(e) => handleResponseChange(question.id, e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />;
+
+      case 'TEXTAREA':
+        return <textarea value={value} disabled={disabled} onChange={(e) => handleResponseChange(question.id, e.target.value)} rows={4} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />;
+
+      case 'RADIO':
+        return (
+          <div className="mt-2 space-y-2">
+            {question.options?.map((option, index) => (
+              <label key={index} className="flex items-center">
+                <input type="radio" name={`question_${question.id}`} value={option} checked={value === option} disabled={disabled} onChange={(e) => handleResponseChange(question.id, e.target.value)} className="border-gray-300 text-amber-600" />
+                <span className="ml-2 text-gray-700">{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+
+      case 'CHECKBOX': {
+        const currentValues: string[] = Array.isArray(value) ? value : [];
+        return (
+          <div className="mt-2 space-y-2">
+            {question.options?.map((option, index) => (
+              <label key={index} className="flex items-center">
+                <input type="checkbox" value={option} checked={currentValues.includes(option)} disabled={disabled} onChange={(e) => {
+                  const newValues = e.target.checked ? [...currentValues, option] : currentValues.filter((v) => v !== option);
+                  handleResponseChange(question.id, newValues);
+                }} className="rounded border-gray-300 text-amber-600" />
+                <span className="ml-2 text-gray-700">{option}</span>
+              </label>
+            ))}
+          </div>
+        );
+      }
+
+      case 'DROPDOWN':
+        return (
+          <select value={value} disabled={disabled} onChange={(e) => handleResponseChange(question.id, e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+            <option value="">Select an option</option>
+            {question.options?.map((option, index) => (
+              <option key={index} value={option}>{option}</option>
+            ))}
+          </select>
+        );
+
+      case 'RATING':
+        return (
+          <div className="mt-2 flex space-x-4">
+            {[1, 2, 3, 4, 5].map((rating) => (
+              <label key={rating} className="flex flex-col items-center cursor-pointer">
+                <input type="radio" name={`question_${question.id}`} value={rating} checked={value === rating} disabled={disabled} onChange={(e) => handleResponseChange(question.id, parseInt(e.target.value))} className="sr-only" />
+                <span className={`w-10 h-10 flex items-center justify-center rounded-full border-2 ${value === rating ? 'bg-amber-500 text-white border-amber-500' : 'border-gray-300'}`}>{rating}</span>
+              </label>
+            ))}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   if (isLoading) {
     return (
-      <HRLayout title="">
-        <div className="flex justify-center items-center h-screen">
-          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <EmployeeLayout title="Loading Survey...">
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
         </div>
-      </HRLayout>
+      </EmployeeLayout>
+    );
+  }
+
+  if (!assignment) {
+    return (
+      <EmployeeLayout title="Survey Not Found">
+        <div className="p-6 text-red-600 font-semibold">Survey not found or not accessible.</div>
+      </EmployeeLayout>
     );
   }
 
   return (
-    <HRLayout title="">
-      <div className="p-6">
+    <EmployeeLayout title="Survey Response">
+      <div className="max-w-4xl mx-auto p-6">
         <div className="mb-6">
-          <button
-            onClick={() => navigate('/hr/surveys')}
-            className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-800"
-          >
-            <ArrowLeft /> Back to Surveys
+          <button onClick={() => navigate('/employee')} className="inline-flex items-center gap-2 text-amber-600 hover:text-amber-800">
+            <ArrowLeft /> Back
           </button>
         </div>
+        <h2 className="text-2xl font-semibold text-gray-900">{assignment.survey_details.title}</h2>
+        <p className="text-gray-600 mt-1">{assignment.survey_details.description}</p>
+        <p className="text-sm mt-2 font-medium text-gray-700">Category: {assignment.survey_details.category}</p>
+        <p className="text-sm font-medium text-gray-700">Due Date: {assignment.due_date ? new Date(assignment.due_date).toLocaleDateString() : 'No Due Date'}</p>
 
-        {stats && (
-          <div className="bg-white rounded-lg shadow mb-6">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                {stats.title} - Survey Statistics
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-900">Completion Rate</h3>
-                  <p className="text-3xl font-bold text-blue-600">
-                    {stats.completion_rate.toFixed(1)}%
-                  </p>
-                  <p className="text-sm text-blue-700">
-                    {stats.completed_assignments} of {stats.total_assignments} completed
-                  </p>
-                </div>
-
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-green-900">Average Score</h3>
-                  <p className="text-3xl font-bold text-green-600">
-                    {stats.avg_score?.toFixed(1) || 'N/A'}
-                  </p>
-                  <p className="text-sm text-green-700">Overall survey score</p>
-                </div>
-              </div>
-
-              {stats.factor_analysis.length > 0 && (
-                <div className="mt-8">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-4">Factor Analysis</h3>
-                  <div className="grid gap-4">
-                    {stats.factor_analysis.map(factor => (
-                      <div key={factor.id} className="border rounded-lg p-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <h4 className="font-medium text-gray-900">{factor.name}</h4>
-                            <p className="text-sm text-gray-500">{factor.type}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-semibold text-blue-600">
-                              {factor.avg_score?.toFixed(1)}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {factor.response_count} responses
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+          {questions.map((question) => (
+            <div key={question.id}>
+              <label className="block text-sm font-medium text-gray-700">
+                {question.text} {question.is_required && <span className="text-rose-600">*</span>}
+              </label>
+              {renderQuestion(question)}
             </div>
-          </div>
-        )}
+          ))}
 
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6">
-            <h3 className="text-xl font-semibold text-gray-900 mb-4">Individual Responses</h3>
-            {responses.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No responses yet
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {responses.map((response) => (
-                  <div key={response.id} className="border rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-medium text-gray-900">
-                          {response.employee_details.name}
-                        </h4>
-                        <p className="text-sm text-gray-500">
-                          {response.employee_details.department} • {response.employee_details.position}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Completed: {new Date(response.completed_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                      {response.total_score !== null && (
-                        <div className="text-right">
-                          <p className="text-2xl font-semibold text-blue-600">
-                            {response.total_score.toFixed(1)}
-                          </p>
-                          <p className="text-sm text-gray-500">Total Score</p>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-4">
-                      {response.responses.map((item, index) => (
-                        <div key={index} className="border-t pt-4">
-                          <p className="font-medium text-gray-700">{item.question_text}</p>
-                          <p className="text-gray-600 mt-1">
-                            {typeof item.answer === 'object'
-                              ? JSON.stringify(item.answer)
-                              : item.answer}
-                          </p>
-                          {item.score !== null && (
-                            <p className="text-sm text-blue-600 mt-1">
-                              Score: {item.score}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+          {!readonly && (
+            <button type="submit" disabled={isSaving} className="inline-flex items-center px-6 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed">
+              {isSaving ? (<><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Saving...</>) : (<><Save className="w-5 h-5 mr-2" /> Submit</>)}
+            </button>
+          )}
+        </form>
       </div>
-    </HRLayout>
+    </EmployeeLayout>
   );
 };
 
-export default SurveyResponses;
+export default SurveyResponse;

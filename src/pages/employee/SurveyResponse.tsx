@@ -62,7 +62,8 @@ const SurveyResponse: React.FC = () => {
         const responseRes = await api.get(`/surveys/assignments/${id}/responses/`);
         const existing = responseRes.data;
         const responseMap: Record<number, ResponseValue> = {};
-       
+       console.log('Loaded saved responses:', existing);
+
         existing.forEach((item: any) => {
   const answer = item.answer;
   if (answer?.hasOwnProperty('value')) {
