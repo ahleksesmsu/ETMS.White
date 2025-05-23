@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'surveys',
     'departments',
     'trainings',
+    'analytics',
 ]
 
 MIDDLEWARE = [
