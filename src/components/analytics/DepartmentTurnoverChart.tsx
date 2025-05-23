@@ -75,3 +75,5 @@ const DepartmentTurnoverChart: React.FC<DepartmentTurnoverChartProps> = ({ data,
     </div>
   );
 };
+
+export default DepartmentTurnoverChart
