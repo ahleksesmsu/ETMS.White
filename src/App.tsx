@@ -21,7 +21,9 @@ import FactorManagement from './pages/hr/FactorManagement';
 import EmployeeManagement from './pages/hr/EmployeeManagement';
 import TrainingManagement from './pages/hr/TrainingManagement';
 import SurveyResponses from './pages/hr/SurveyResponses';
+import TurnoverManagement from './pages/analytics/TurnoverManagement';
 
+        
 // Employee Pages
 import EmployeeDashboard from './pages/employee/Dashboard';
 import SurveyResponse from './pages/employee/SurveyResponse';
@@ -68,6 +70,14 @@ function App() {
             element={
               <RequireAuth allowedRoles={['HR']}>
                 <HRDashboard />
+              </RequireAuth>
+            } 
+          />
+           <Route 
+            path="/hr/turnover" 
+            element={
+              <RequireAuth allowedRoles={['HR']}>
+                <TurnoverManagement />
               </RequireAuth>
             } 
           />
