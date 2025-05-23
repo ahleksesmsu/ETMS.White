@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { BookOpen, Plus, Edit2, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Edit2, Trash2, Users } from 'lucide-react';
 import HRLayout from '../../components/layout/HRLayout';
 import api from '../../services/api';
 
@@ -14,6 +14,12 @@ interface Training {
   department_details?: {
     name: string;
   };
+  factors: number[];
+  factors_details: {
+    id: number;
+    name: string;
+    type: string;
+  }[];
   is_active: boolean;
   is_mandatory: boolean;
   max_participants: number | null;
@@ -25,18 +31,44 @@ interface Department {
   name: string;
 }
 
+interface Factor {
+  id: number;
+  name: string;
+  type: string;
+}
+
+interface Employee {
+  id: number;
+  user_details: {
+    email: string;
+    first_name: string;
+    last_name: string;
+    department_details?: {
+      name: string;
+    };
+  };
+  position: string;
+}
+
 const TrainingManagement: React.FC = () => {
   const [trainings, setTrainings] = useState<Training[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [factors, setFactors] = useState<Factor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedTraining, setSelectedTraining] = useState<Training | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployees, setSelectedEmployees] = useState<number[]>([]);
+  const [assignmentNotes, setAssignmentNotes] = useState('');
+  const [employeeSearchQuery, setEmployeeSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     start_date: '',
     end_date: '',
     department: '',
+    factors: [] as number[],
     is_active: true,
     is_mandatory: false,
     max_participants: '',
@@ -45,6 +77,7 @@ const TrainingManagement: React.FC = () => {
   useEffect(() => {
     fetchTrainings();
     fetchDepartments();
+    fetchFactors();
   }, []);
 
   const fetchTrainings = async () => {
@@ -66,6 +99,26 @@ const TrainingManagement: React.FC = () => {
     } catch (error) {
       console.error('Error fetching departments:', error);
       toast.error('Failed to load departments');
+    }
+  };
+
+  const fetchFactors = async () => {
+    try {
+      const response = await api.get('/surveys/factors/');
+      setFactors(response.data);
+    } catch (error) {
+      console.error('Error fetching factors:', error);
+      toast.error('Failed to load factors');
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await api.get('/users/employees/');
+      setEmployees(response.data);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+      toast.error('Failed to load employees');
     }
   };
 
@@ -94,6 +147,7 @@ const TrainingManagement: React.FC = () => {
         start_date: '',
         end_date: '',
         department: '',
+        factors: [],
         is_active: true,
         is_mandatory: false,
         max_participants: '',
@@ -105,6 +159,35 @@ const TrainingManagement: React.FC = () => {
     }
   };
 
+  const handleAssign = async () => {
+    if (!selectedTraining || selectedEmployees.length === 0) {
+      toast.error('Please select at least one employee');
+      return;
+    }
+
+    try {
+      const response = await api.post(`/trainings/programs/${selectedTraining.id}/assign/`, {
+        employee_ids: selectedEmployees,
+        notes: assignmentNotes,
+      });
+
+      if (response.data.errors) {
+        toast.warning(`Assignment completed with some issues: ${response.data.errors.join(', ')}`);
+      } else {
+        toast.success(`Training assigned to ${response.data.assignments_created} employee(s)`);
+      }
+
+      setShowAssignModal(false);
+      setSelectedEmployees([]);
+      setAssignmentNotes('');
+      setEmployeeSearchQuery('');
+      fetchTrainings();
+    } catch (error) {
+      console.error('Error assigning training:', error);
+      toast.error('Failed to assign training');
+    }
+  };
+
   const handleEdit = (training: Training) => {
     setSelectedTraining(training);
     setFormData({
@@ -113,6 +196,7 @@ const TrainingManagement: React.FC = () => {
       start_date: training.start_date,
       end_date: training.end_date,
       department: training.department?.toString() || '',
+      factors: training.factors || [],
       is_active: training.is_active,
       is_mandatory: training.is_mandatory,
       max_participants: training.max_participants?.toString() || '',
@@ -133,6 +217,12 @@ const TrainingManagement: React.FC = () => {
     }
   };
 
+  const handleAssignClick = (training: Training) => {
+    setSelectedTraining(training);
+    setShowAssignModal(true);
+    fetchEmployees();
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -140,6 +230,21 @@ const TrainingManagement: React.FC = () => {
       day: 'numeric',
     });
   };
+
+  const filteredEmployees = employees.filter(employee => {
+    const searchTerm = employeeSearchQuery.toLowerCase();
+    const fullName = `${employee.user_details.first_name} ${employee.user_details.last_name}`.toLowerCase();
+    const email = employee.user_details.email.toLowerCase();
+    const department = employee.user_details.department_details?.name.toLowerCase() || '';
+    const position = employee.position.toLowerCase();
+
+    return (
+      fullName.includes(searchTerm) ||
+      email.includes(searchTerm) ||
+      department.includes(searchTerm) ||
+      position.includes(searchTerm)
+    );
+  });
 
   return (
     <HRLayout title="Training Management">
@@ -159,6 +264,7 @@ const TrainingManagement: React.FC = () => {
                 start_date: '',
                 end_date: '',
                 department: '',
+                factors: [],
                 is_active: true,
                 is_mandatory: false,
                 max_participants: '',
@@ -224,7 +330,34 @@ const TrainingManagement: React.FC = () => {
                     </div>
                   </div>
 
+                  {training.factors_details.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Related Factors:</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {training.factors_details.map(factor => (
+                          <span
+                            key={factor.id}
+                            className={`px-2 py-1 text-xs font-medium rounded-full ${
+                              factor.type === 'TURNOVER'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {factor.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4 flex justify-end space-x-2">
+                    <button
+                      onClick={() => handleAssignClick(training)}
+                      className="text-blue-600 hover:text-blue-800"
+                      title="Assign to employees"
+                    >
+                      <Users className="h-5 w-5" />
+                    </button>
                     <button
                       onClick={() => handleEdit(training)}
                       className="text-teal-600 hover:text-teal-800"
@@ -295,6 +428,39 @@ const TrainingManagement: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Related Factors
+                    </label>
+                    <div className="mt-2 space-y-2">
+                      {factors.map(factor => (
+                        <label key={factor.id} className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={formData.factors.includes(factor.id)}
+                            onChange={(e) => {
+                              const newFactors = e.target.checked
+                                ? [...formData.factors, factor.id]
+                                : formData.factors.filter(id => id !== factor.id);
+                              setFormData({ ...formData, factors: newFactors });
+                            }}
+                            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                          />
+                          <span className="ml-2 text-sm text-gray-700">
+                            {factor.name}
+                            <span className={`ml-2 text-xs ${
+                              factor.type === 'TURNOVER'
+                                ? 'text-amber-600'
+                                : 'text-blue-600'
+                            }`}>
+                              ({factor.type === 'TURNOVER' ? 'Turnover' : 'Non-Turnover'})
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -376,6 +542,103 @@ const TrainingManagement: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Assign Training Modal */}
+        {showAssignModal && selectedTraining && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-3xl w-full">
+              <h3 className="text-lg font-semibold mb-4">
+                Assign Training: {selectedTraining.title}
+              </h3>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Search Employees
+                </label>
+                <input
+                  type="text"
+                  value={employeeSearchQuery}
+                  onChange={(e) => setEmployeeSearchQuery(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
+                  placeholder="Search by name, email, department..."
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Assignment Notes
+                </label>
+                <textarea
+                  value={assignmentNotes}
+                  onChange={(e) => setAssignmentNotes(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
+                  rows={2}
+                  placeholder="Optional notes for the assignment..."
+                />
+              </div>
+
+              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-md mb-4">
+                {filteredEmployees.map((employee) => (
+                  <div
+                    key={employee.id}
+                    className="flex items-center p-3 hover:bg-gray-50 border-b border-gray-200 last:border-b-0"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedEmployees.includes(employee.id)}
+                      onChange={() => {
+                        setSelectedEmployees(
+                          selectedEmployees.includes(employee.id)
+                            ? selectedEmployees.filter(id => id !== employee.id)
+                            : [...selectedEmployees, employee.id]
+                        );
+                      }}
+                      className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                    />
+                    <div className="ml-3 flex-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        {employee.user_details.first_name} {employee.user_details.last_name}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {employee.user_details.email}
+                      </p>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {employee.user_details.department_details?.name || 'No Department'} •{' '}
+                      {employee.position}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  {selectedEmployees.length} employee(s) selected
+                </p>
+                <div className="space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowAssignModal(false);
+                      setSelectedEmployees([]);
+                      setAssignmentNotes('');
+                      setEmployeeSearchQuery('');
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAssign}
+                    disabled={selectedEmployees.length === 0}
+                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Assign Training
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

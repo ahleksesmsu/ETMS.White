@@ -23,6 +23,11 @@ class Training(models.Model):
         blank=True,
         related_name='trainings'
     )
+    factors = models.ManyToManyField(
+        'surveys.Factor',
+        related_name='trainings',
+        blank=True
+    )
     is_active = models.BooleanField(default=True)
     is_mandatory = models.BooleanField(default=False)
     max_participants = models.PositiveIntegerField(null=True, blank=True)

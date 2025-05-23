@@ -17,12 +17,20 @@ interface User {
   is_active: boolean;
 }
 
+interface Department {
+  id: number;
+  name: string;
+}
+
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editRowId, setEditRowId] = useState<number | null>(null);
+
   const [formData, setFormData] = useState({
     email: '',
     first_name: '',
@@ -35,6 +43,7 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => {
     fetchUsers();
+    fetchDepartments();
   }, []);
 
   const fetchUsers = async () => {
@@ -42,10 +51,18 @@ const UserManagement: React.FC = () => {
       const response = await api.get('/users/accounts/');
       setUsers(response.data);
     } catch (error) {
-      console.error('Error fetching users:', error);
       toast.error('Failed to load users');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/departments/');
+      setDepartments(response.data);
+    } catch (error) {
+      toast.error('Failed to load departments');
     }
   };
 
@@ -74,7 +91,6 @@ const UserManagement: React.FC = () => {
         confirm_password: '',
       });
     } catch (error) {
-      console.error('Error creating user:', error);
       toast.error('Failed to create user');
     }
   };
@@ -91,14 +107,26 @@ const UserManagement: React.FC = () => {
       toast.success('Password reset successfully');
       setShowResetModal(false);
       setSelectedUser(null);
-      setFormData({
-        ...formData,
-        password: '',
-        confirm_password: '',
-      });
+      setFormData({ ...formData, password: '', confirm_password: '' });
     } catch (error) {
-      console.error('Error resetting password:', error);
       toast.error('Failed to reset password');
+    }
+  };
+
+  const handleEditUserSubmitInline = async (userId: number) => {
+    try {
+      await api.put(`/users/accounts/${userId}/`, {
+        email: formData.email,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        role: formData.role,
+        department: formData.department || null,
+      });
+      toast.success('User updated');
+      setEditRowId(null);
+      fetchUsers();
+    } catch (error) {
+      toast.error('Failed to update user');
     }
   };
 
@@ -107,10 +135,9 @@ const UserManagement: React.FC = () => {
 
     try {
       await api.delete(`/users/accounts/${userId}/`);
-      toast.success('User deleted successfully');
+      toast.success('User deleted');
       fetchUsers();
     } catch (error) {
-      console.error('Error deleting user:', error);
       toast.error('Failed to delete user');
     }
   };
@@ -123,7 +150,6 @@ const UserManagement: React.FC = () => {
             <Users className="h-6 w-6 text-gray-600 mr-2" />
             <h2 className="text-xl font-semibold text-gray-800">User Accounts</h2>
           </div>
-
           <button
             onClick={() => setShowAddModal(true)}
             className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
@@ -142,76 +168,143 @@ const UserManagement: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Name
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Department
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.map((user) => (
                   <tr key={user.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {user.first_name} {user.last_name}
-                      </div>
+                      {editRowId === user.id ? (
+  <div className="space-y-1">
+    <input
+      value={formData.first_name}
+      onChange={(e) =>
+        setFormData({ ...formData, first_name: e.target.value })
+      }
+      className="border rounded px-1 py-1 w-24"
+    />
+    <input
+      value={formData.last_name}
+      onChange={(e) =>
+        setFormData({ ...formData, last_name: e.target.value })
+      }
+      className="border rounded px-1 py-1 w-24"
+    />
+  </div>
+) : (
+  `${user.first_name} ${user.last_name}`
+)}
+
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-500">{user.email}</div>
+                      {editRowId === user.id ? (
+                        <input
+                          value={formData.email}
+                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                          className="border rounded px-2 py-1 w-full"
+                        />
+                      ) : (
+                        user.email
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.role === 'ADMIN' 
-                          ? 'bg-purple-100 text-purple-800'
-                          : user.role === 'HR'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {user.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {user.department_details?.name || 'N/A'}
+                      {editRowId === user.id ? (
+                        <select
+                          value={formData.role}
+                          onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                          className="border rounded px-2 py-1 w-full"
+                        >
+                          <option value="ADMIN">Admin</option>
+                          <option value="HR">HR Officer</option>
+                          <option value="EMPLOYEE">Employee</option>
+                        </select>
+                      ) : (
+                        user.role
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                      {editRowId === user.id ? (
+                        <select
+                          value={formData.department}
+                          onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                          className="border rounded px-2 py-1 w-full"
+                        >
+                          <option value="">Select department</option>
+                          {departments.map((dept) => (
+                            <option key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        user.department_details?.name || 'N/A'
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs font-semibold rounded-full ${
+                        user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
                         {user.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setShowResetModal(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                      >
-                        <Key className="h-5 w-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      {editRowId === user.id ? (
+                        <>
+                          <button
+                            onClick={() => handleEditUserSubmitInline(user.id)}
+                            className="text-green-600 hover:text-green-800"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditRowId(null)}
+                            className="text-gray-600 hover:text-gray-800"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => {
+                              setEditRowId(user.id);
+                              setFormData({
+                                email: user.email,
+                                first_name: user.first_name,
+                                last_name: user.last_name,
+                                role: user.role,
+                                department: user.department?.toString() || '',
+                                password: '',
+                                confirm_password: '',
+                              });
+                            }}
+                            className="text-yellow-600 hover:text-yellow-800"
+                          >
+                            <Edit className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowResetModal(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <Key className="h-5 w-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 className="h-5 w-5" />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -219,9 +312,7 @@ const UserManagement: React.FC = () => {
             </table>
           </div>
         )}
-
-        {/* Add User Modal */}
-        {showAddModal && (
+ {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-8 max-w-md w-full">
               <h3 className="text-lg font-semibold mb-4">Add New User</h3>
@@ -259,16 +350,45 @@ const UserManagement: React.FC = () => {
                       />
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+  <div>
+    <label className="block text-sm font-medium text-gray-700">Role</label>
+    <select
+      value={formData.role}
+      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+    >
+      <option value="ADMIN">Admin</option>
+      <option value="HR">HR Officer</option>
+      <option value="EMPLOYEE">Employee</option>
+    </select>
+  </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700">Department</label>
+    <select
+      value={formData.department}
+      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+    >
+      <option value="">Select department</option>
+      {departments.map((dept) => (
+        <option key={dept.id} value={dept.id}>{dept.name}</option>
+      ))}
+    </select>
+  </div>
+</div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">Role</label>
+                    <label className="block text-sm font-medium text-gray-700">Department</label>
                     <select
-                      value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                       className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     >
-                      <option value="ADMIN">Admin</option>
-                      <option value="HR">HR Officer</option>
-                      <option value="EMPLOYEE">Employee</option>
+                      <option value="">Select department</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -312,7 +432,6 @@ const UserManagement: React.FC = () => {
           </div>
         )}
 
-        {/* Reset Password Modal */}
         {showResetModal && selectedUser && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-8 max-w-md w-full">
