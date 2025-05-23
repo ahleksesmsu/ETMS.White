@@ -8,6 +8,18 @@ from departments.serializers import DepartmentSerializer
 User = get_user_model()
 
 
+class NestedUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email']
+
+class NestedEmployeeSerializer(serializers.ModelSerializer):
+    user = NestedUserSerializer()
+
+    class Meta:
+        model = Employee
+        fields = ['id', 'user']
+
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Customize token to include user information."""
     

@@ -1,22 +1,23 @@
+#analytics serializer
 from rest_framework import serializers
 from .models import *
 from surveys.models import Factor, Survey, Question, SurveyAssignment, SurveyResponse
 from users.serializers import UserSerializer
 from departments.serializers import DepartmentSerializer
 
-
+from users.serializers import NestedEmployeeSerializer
 
 class EmployeeTurnoverSerializer(serializers.ModelSerializer):
-    employee_details = UserSerializer(source='employee.user', read_only=True)
-    department_details = DepartmentSerializer(source='department', read_only=True)
+    employee = NestedEmployeeSerializer(read_only=True)  # replaces employee_details
+   
     factor_name = serializers.StringRelatedField(source='factor', read_only=True)
     factor = serializers.PrimaryKeyRelatedField(queryset=Factor.objects.all(), required=False)
 
     class Meta:
         model = EmployeeTurnover
         fields = [
-            'id', 'employee', 'employee_details', 'exit_date', 
-            'exit_reason', 'department', 'department_details',
+            'id', 'employee', 'exit_date', 
+            'exit_reason', 'department',
             'position', 'tenure_months', 'performance_rating',
             'survey_responses', 'factor', 'factor_name',
             'created_at', 'created_by'

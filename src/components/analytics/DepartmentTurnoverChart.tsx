@@ -76,4 +76,4 @@ const DepartmentTurnoverChart: React.FC<DepartmentTurnoverChartProps> = ({ data,
   );
 };
 
-export default DepartmentTurnoverChart;
+export default DepartmentTurnoverChart

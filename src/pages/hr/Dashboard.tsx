@@ -281,4 +281,4 @@ const HRDashboard: React.FC = () => {
   );
 };
 
-export default HRDashboard;
+export default HRDashboard

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { Users, FileText, Edit2, Trash2 } from 'lucide-react';
@@ -9,10 +8,10 @@ interface TurnoverRecord {
   id: string;
   employee: {
     id: number;
-    user?: {
-      first_name?: string;
-      last_name?: string;
-      email?: string;
+    user: {
+      first_name: string;
+      last_name: string;
+      email: string;
     };
   };
   exit_date: string;
@@ -166,14 +165,6 @@ const TurnoverManagement: React.FC = () => {
     });
   };
 
-  const uniqueDepartments = Array.from(
-    new Map(
-      activeEmployees
-        .filter(emp => emp.department_details?.id)
-        .map(emp => [emp.department_details!.id, emp.department_details!])
-    ).values()
-  );
-
   return (
     <HRLayout title="Turnover Management">
       <div className="container mx-auto">
@@ -217,8 +208,10 @@ const TurnoverManagement: React.FC = () => {
                 {turnoverRecords.map((rec) => (
                   <tr key={rec.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{rec.employee?.user?.first_name} {rec.employee?.user?.last_name}</div>
-                      <div className="text-sm text-gray-500">{rec.employee?.user?.email}</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {rec.employee?.user?.first_name} {rec.employee?.user?.last_name}
+                      </div>
+                      
                     </td>
                     <td className="px-6 py-4">{rec.position}</td>
                     <td className="px-6 py-4">{rec.department?.name || 'N/A'}</td>
@@ -226,8 +219,12 @@ const TurnoverManagement: React.FC = () => {
                     <td className="px-6 py-4">{rec.tenure_months} months</td>
                     <td className="px-6 py-4">{rec.performance_rating}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button onClick={() => handleEdit(rec)} className="text-teal-600 hover:text-teal-900 mr-4"><Edit2 className="h-5 w-5" /></button>
-                      <button onClick={() => handleDelete(rec.id)} className="text-red-600 hover:text-red-900"><Trash2 className="h-5 w-5" /></button>
+                      <button onClick={() => handleEdit(rec)} className="text-teal-600 hover:text-teal-900 mr-4">
+                        <Edit2 className="h-5 w-5" />
+                      </button>
+                      <button onClick={() => handleDelete(rec.id)} className="text-red-600 hover:text-red-900">
+                        <Trash2 className="h-5 w-5" />
+                      </button>
                     </td>
                   </tr>
                 ))}

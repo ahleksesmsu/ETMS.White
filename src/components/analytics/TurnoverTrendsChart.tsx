@@ -58,4 +58,4 @@ const TurnoverTrendsChart: React.FC<TurnoverTrendsChartProps> = ({ data, isLoadi
   );
 };
 
-export default TurnoverTrendsChart;
+export default TurnoverTrendsChart

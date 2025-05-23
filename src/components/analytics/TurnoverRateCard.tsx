@@ -52,4 +52,4 @@ const TurnoverRateCard: React.FC<TurnoverRateCardProps> = ({
   );
 };
 
-export default TurnoverRateCard;
+export default TurnoverRateCard
