@@ -208,10 +208,8 @@ const TurnoverManagement: React.FC = () => {
                 {turnoverRecords.map((rec) => (
                   <tr key={rec.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {rec.employee?.user?.first_name} {rec.employee?.user?.last_name}
-                      </div>
-                      
+                      <div className="text-sm font-medium text-gray-900">{rec.employee?.user?.first_name} {rec.employee?.user?.last_name}</div>
+                      <div className="text-sm text-gray-500">{rec.employee?.user?.email}</div>
                     </td>
                     <td className="px-6 py-4">{rec.position}</td>
                     <td className="px-6 py-4">{rec.department?.name || 'N/A'}</td>
