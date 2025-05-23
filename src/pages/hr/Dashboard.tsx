@@ -280,5 +280,3 @@ const HRDashboard: React.FC = () => {
     </HRLayout>
   );
 };
-
-export default HRDashboard;

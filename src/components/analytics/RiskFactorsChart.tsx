@@ -74,5 +74,3 @@ const RiskFactorsChart: React.FC<RiskFactorsChartProps> = ({ data, isLoading }) 
     </div>
   );
 };
-
-export default RiskFactorsChart;
